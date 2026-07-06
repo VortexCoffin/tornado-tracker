@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "predev": "test -f node_modules/vite/package.json && test -f node_modules/react-router-dom/package.json || npm install",
+    "prebuild": "test -f node_modules/vite/package.json && test -f node_modules/@vitejs/plugin-react/package.json || npm install",
     "dev": "npx vite",
     "build": "npx vite build",
     "lint": "npx oxlint",
