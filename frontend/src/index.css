@@ -1,0 +1,40 @@
+:root {
+  --bg: #0b0f14;
+  --surface: #121820;
+  --surface-2: #1a2230;
+  --border: #2a3548;
+  --text: #c8d2e0;
+  --text-muted: #7b8aa3;
+  --text-bright: #f4f7fb;
+  --accent: #e85d3a;
+  --warning: #f5a623;
+  --danger: #e53935;
+  --success: #43a047;
+  --map-height: calc(100vh - 64px);
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}

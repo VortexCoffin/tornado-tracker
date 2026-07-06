@@ -1,0 +1,28 @@
+{
+  "name": "canada-tornado-tracker-frontend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "predev": "test -f node_modules/vite/package.json && test -f node_modules/react-router-dom/package.json || npm install",
+    "dev": "npx vite",
+    "build": "npx vite build",
+    "lint": "npx oxlint",
+    "preview": "npx vite preview"
+  },
+  "dependencies": {
+    "axios": "^1.18.1",
+    "leaflet": "^1.9.4",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-leaflet": "^5.0.0",
+    "react-router-dom": "^7.6.2"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "oxlint": "^1.71.0",
+    "vite": "^8.1.1"
+  }
+}

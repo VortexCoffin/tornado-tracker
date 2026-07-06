@@ -1,0 +1,17 @@
+{
+  "name": "Canada Tornado Tracker",
+  "short_name": "Tornado CA",
+  "description": "Live tornado alerts, radar, and storm tracking for Canada",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f1419",
+  "theme_color": "#d32f2f",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

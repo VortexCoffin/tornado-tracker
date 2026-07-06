@@ -1,0 +1,16 @@
+{
+  "name": "canada-tornado-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "install:all": "npm install --prefix frontend",
+    "dev:backend": "npm run dev --prefix backend",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "start:backend": "npm start --prefix backend",
+    "build": "npm run build --prefix frontend",
+    "deploy": "bash deploy.sh",
+    "deploy:native": "DEPLOY_MODE=native bash deploy.sh",
+    "launch:web": "bash launch-web.sh",
+    "stop": "bash stop.sh"
+  }
+}
