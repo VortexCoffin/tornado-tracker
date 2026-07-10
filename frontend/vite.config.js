@@ -4,6 +4,12 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
                             build: {
-                              target: 'es2020'   // This is key for export issues
+                              target: 'es2020',
+                              modulePreload: false,
+                              rollupOptions: {
+                                output: {
+                                  format: 'es'
+                                }
+                              }
                             }
 })
