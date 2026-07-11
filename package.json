@@ -16,6 +16,9 @@
     "stop": "bash stop.sh"
   },
   "engines": {
-    "node": ">=18"
+    "node": "20.x"
+  },
+  "dependencies": {
+    "@vercel/analytics": "^2.0.1"
   }
 }
