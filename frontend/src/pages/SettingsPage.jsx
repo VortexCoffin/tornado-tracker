@@ -38,13 +38,13 @@ export default function SettingsPage() {
       .get('/api/notifications/preferences', { headers: authHeaders() })
       .then((response) => {
         const prefs = response.data.preferences
-        setSmsEnabled(prefs.smsEnabled)
+        // SMS is coming soon — keep toggle off in the UI for now
+        setSmsEnabled(false)
         setInAppEnabled(prefs.inAppEnabled)
         setBrowserEnabled(prefs.browserEnabled)
         setPhoneNumber(prefs.phoneNumber || '')
         setProvinces(prefs.provinces || [])
         setAlertAreas(prefs.alertAreas || [])
-        setSmsConfigured(response.data.smsConfigured)
       })
       .catch((err) => {
         setError(err.response?.data?.message || 'Could not load settings')
@@ -100,7 +100,7 @@ export default function SettingsPage() {
       await axios.put(
         '/api/notifications/preferences',
         {
-          smsEnabled,
+          smsEnabled: false, // SMS coming soon
           inAppEnabled,
           browserEnabled,
           phoneNumber,
