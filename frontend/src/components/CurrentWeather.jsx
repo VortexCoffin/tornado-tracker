@@ -167,7 +167,7 @@ export default function CurrentWeather({
 
   const stats = weather
     ? [
-        { label: 'Feels like', value: `${weather.current.feelsLike}°C` },
+        { label: 'Feels like', value: `${weather?.current.feelsLike ?? 'N/A'}°C` },
         { label: 'Humidity', value: `${weather.current.humidity}%` },
         { label: 'Dew point', value: `${weather.current.dewPoint}°C` },
         {

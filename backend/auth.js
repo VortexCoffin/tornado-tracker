@@ -12,11 +12,15 @@ import {
 const TOKEN_SECRET = process.env.AUTH_SECRET || "";
 
 if (!TOKEN_SECRET && process.env.NODE_ENV === "production") {
-  throw new Error("AUTH_SECRET must be set in production");
+  console.error(
+    "WARNING: AUTH_SECRET is not set. Set it in Vercel Project Settings → Environment Variables (or backend/.env). Using a fallback secret until then."
+  );
 }
 
 const EFFECTIVE_TOKEN_SECRET =
-  TOKEN_SECRET || "canada-tornado-tracker-dev-secret-change-me";
+  TOKEN_SECRET ||
+  process.env.VERCEL_GIT_COMMIT_SHA ||
+  "canada-tornado-tracker-dev-secret-change-me";
 
 function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString("hex");

@@ -1,7 +1,6 @@
 import crypto from "node:crypto";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import {
   defaultSubscription,
   canUseOverlay,
@@ -9,9 +8,9 @@ import {
   subscribeToTier,
   OVERLAYS,
 } from "./subscriptions.js";
+import { getDataDir } from "./paths.js";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = join(__dirname, "data");
+const DATA_DIR = getDataDir();
 const ACCOUNTS_DIR = join(DATA_DIR, "accounts");
 const USERS_FILE = join(DATA_DIR, "users.json");
 const ACCOUNTS_INDEX = join(ACCOUNTS_DIR, "index.json");

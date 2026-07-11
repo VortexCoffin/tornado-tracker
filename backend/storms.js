@@ -1,11 +1,10 @@
 import crypto from "node:crypto";
 import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
-import { join, dirname, extname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, extname } from "node:path";
 import { getAccountById } from "./accounts.js";
+import { getDataDir } from "./paths.js";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = join(__dirname, "data", "storms");
+const DATA_DIR = join(getDataDir(), "storms");
 const POSTS_FILE = join(DATA_DIR, "posts.json");
 const REPORTS_FILE = join(DATA_DIR, "reports.json");
 const UPLOADS_DIR = join(DATA_DIR, "uploads");

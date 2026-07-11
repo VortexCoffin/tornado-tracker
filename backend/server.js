@@ -42,10 +42,12 @@ import {
   reportPost,
 } from "./storms.js";
 import { getCurrentWeather } from "./weather.js";
+import { isServerless } from "./paths.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FRONTEND_DIST = join(__dirname, "..", "frontend", "dist");
 const PORT = Number(process.env.PORT) || 5000;
+const SERVERLESS = isServerless();
 const CACHE_TTL_MS = 3 * 60 * 1000;
 const ECCC_ALERTS_URL =
   "https://api.weather.gc.ca/collections/weather-alerts/items?f=json&lang=en-CA&limit=500";
@@ -71,6 +73,22 @@ function sendJson(res, status, body, req) {
 }
 
 async function readJsonBody(req) {
+  // Vercel may already parse / buffer the body before our handler runs
+  if (req.body !== undefined && req.body !== null) {
+    if (typeof req.body === "object" && !Buffer.isBuffer(req.body)) {
+      return req.body;
+    }
+    const raw = Buffer.isBuffer(req.body)
+      ? req.body.toString("utf8")
+      : String(req.body);
+    if (!raw) return {};
+    try {
+      return JSON.parse(raw);
+    } catch {
+      throw new Error("Invalid JSON body");
+    }
+  }
+
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
   const raw = Buffer.concat(chunks).toString("utf8");
@@ -154,6 +172,7 @@ const STATIC_TYPES = {
 };
 
 function tryServeStatic(req, res, url) {
+  if (SERVERLESS) return false;
   if (req.method !== "GET" && req.method !== "HEAD") return false;
   if (!existsSync(FRONTEND_DIST)) return false;
   if (url.pathname.startsWith("/api/")) return false;
@@ -716,31 +735,44 @@ async function handleRequest(req, res) {
   }
 }
 
-const server = http.createServer((req, res) => {
-  handleRequest(req, res);
-});
+export { handleRequest };
 
-server.listen(PORT, "0.0.0.0", () => {
-  console.log(`Canada Tornado Tracker API running at http://localhost:${PORT}`);
-  if (existsSync(FRONTEND_DIST)) {
-    console.log("Serving frontend from frontend/dist");
-  }
-  if (process.env.NODE_ENV === "production" && !process.env.AUTH_SECRET) {
-    console.error("FATAL: Set AUTH_SECRET in backend/.env before production use");
-    process.exit(1);
-  }
-  if (paypalConfigured()) {
-    const mode = process.env.PAYPAL_MODE === "live" ? "live" : "sandbox";
-    console.log(`PayPal: ${mode} mode`);
-    if (process.env.NODE_ENV === "production" && mode !== "live") {
-      console.warn("PayPal: production is running in sandbox mode — set PAYPAL_MODE=live for real billing");
+if (!SERVERLESS) {
+  const server = http.createServer((req, res) => {
+    handleRequest(req, res);
+  });
+
+  server.listen(PORT, "0.0.0.0", () => {
+    console.log(
+      `Canada Tornado Tracker API running at http://localhost:${PORT}`
+    );
+    if (existsSync(FRONTEND_DIST)) {
+      console.log("Serving frontend from frontend/dist");
     }
-  }
-  if (!smsConfigured()) {
-    console.log("SMS: add Twilio credentials to backend/.env to enable text alerts");
-  }
-  if (!paypalConfigured()) {
-    console.log("PayPal: add credentials to backend/.env to enable paid subscriptions");
-  }
-  runNotificationCheck();
-});
+    if (process.env.NODE_ENV === "production" && !process.env.AUTH_SECRET) {
+      console.error(
+        "WARNING: Set AUTH_SECRET in backend/.env before production use"
+      );
+    }
+    if (paypalConfigured()) {
+      const mode = process.env.PAYPAL_MODE === "live" ? "live" : "sandbox";
+      console.log(`PayPal: ${mode} mode`);
+      if (process.env.NODE_ENV === "production" && mode !== "live") {
+        console.warn(
+          "PayPal: production is running in sandbox mode — set PAYPAL_MODE=live for real billing"
+        );
+      }
+    }
+    if (!smsConfigured()) {
+      console.log(
+        "SMS: add Twilio credentials to backend/.env to enable text alerts"
+      );
+    }
+    if (!paypalConfigured()) {
+      console.log(
+        "PayPal: add credentials to backend/.env to enable paid subscriptions"
+      );
+    }
+    runNotificationCheck();
+  });
+}

@@ -1,13 +1,12 @@
 import "./env.js";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { TIERS } from "./subscriptions.js";
 import { getAccountById, updateAccount } from "./accounts.js";
 import { listOverlaysForTier } from "./subscriptions.js";
+import { getDataDir } from "./paths.js";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = join(__dirname, "data");
+const DATA_DIR = getDataDir();
 const PLANS_FILE = join(DATA_DIR, "paypal-plans.json");
 const PENDING_FILE = join(DATA_DIR, "paypal-pending.json");
 

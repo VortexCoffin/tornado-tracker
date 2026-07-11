@@ -1,13 +1,12 @@
 import "./env.js";
 import crypto from "node:crypto";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { readUsers, writeUsers } from "./accounts.js";
 import { isTornadoOnGround, matchesAlertArea } from "./alerts.js";
+import { getDataDir } from "./paths.js";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = join(__dirname, "data");
+const DATA_DIR = getDataDir();
 const INBOX_FILE = join(DATA_DIR, "notifications.json");
 
 function twilioConfig() {

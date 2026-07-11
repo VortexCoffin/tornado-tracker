@@ -22,7 +22,7 @@ Live tornado and severe thunderstorm alerts for Canada, with radar, weather cond
 ## Quick start (development)
 
 ```bash
-cd /home/sam/Projects/canada-tornado-tracker
+cd /path/to/tornado-tracker
 chmod +x start.sh
 ./start.sh
 ```
@@ -39,6 +39,34 @@ npm run dev:backend
 
 # Terminal 2
 npm run dev:frontend
+```
+
+## Deploy on Vercel (recommended for free hosting)
+
+This repo is set up for Vercel: Vite frontend + serverless `/api/*` backend.
+
+1. Push this repo to GitHub (already linked if using `VortexCoffin/tornado-tracker`).
+2. In [Vercel](https://vercel.com) → **Add New Project** → import the repo.
+3. Leave framework detection as-is (`vercel.json` sets install/build/output).
+4. Add environment variables (Project → Settings → Environment Variables):
+
+| Name | Required | Notes |
+|------|----------|--------|
+| `AUTH_SECRET` | **Yes** | Long random string for login tokens |
+| `PAYPAL_CLIENT_ID` | Optional | Paid subscriptions |
+| `PAYPAL_CLIENT_SECRET` | Optional | Paid subscriptions |
+| `PAYPAL_MODE` | Optional | `live` or `sandbox` |
+| `TWILIO_ACCOUNT_SID` | Optional | SMS alerts |
+| `TWILIO_AUTH_TOKEN` | Optional | SMS alerts |
+| `TWILIO_PHONE_NUMBER` | Optional | SMS alerts |
+
+5. Deploy. Your site will serve the React app and proxy `/api/*` to the serverless handler.
+
+**Limits on Vercel:** account/storm data is stored under `/tmp` and can reset between cold starts. For permanent storage, SMS polling, and always-on reliability, use the Docker/VPS path below.
+
+```bash
+# Optional: deploy from CLI
+npx vercel --prod
 ```
 
 ## Production (Docker)
