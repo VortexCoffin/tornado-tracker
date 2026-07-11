@@ -8,6 +8,7 @@
     "prebuild": "test -f node_modules/vite/package.json && test -f node_modules/@vitejs/plugin-react/package.json || npm install",
     "dev": "npx vite",
     "build": "npx vite build",
+    "vercel-build": "npx vite build",
     "lint": "npx oxlint",
     "preview": "npx vite preview"
   },

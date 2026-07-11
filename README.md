@@ -47,8 +47,12 @@ This repo is set up for Vercel: Vite frontend + serverless `/api/*` backend.
 
 1. Push this repo to GitHub (already linked if using `VortexCoffin/tornado-tracker`).
 2. In [Vercel](https://vercel.com) → **Add New Project** → import the repo.
-3. Leave framework detection as-is (`vercel.json` sets install/build/output).
-4. Add environment variables (Project → Settings → Environment Variables):
+3. Leave framework detection as-is (`vercel.json` controls the build).
+4. **Turn off Deployment Protection** (required for a public app):
+   - Project → **Settings** → **Deployment Protection**
+   - Set **Vercel Authentication** to **Only Preview Deployments** or **None**
+   - If Standard Protection is on, API calls from the browser hit `vercel.com/sso-api` and fail with CORS/404
+5. Add environment variables (Project → Settings → Environment Variables):
 
 | Name | Required | Notes |
 |------|----------|--------|
@@ -60,7 +64,10 @@ This repo is set up for Vercel: Vite frontend + serverless `/api/*` backend.
 | `TWILIO_AUTH_TOKEN` | Optional | SMS alerts |
 | `TWILIO_PHONE_NUMBER` | Optional | SMS alerts |
 
-5. Deploy. Your site will serve the React app and proxy `/api/*` to the serverless handler.
+6. Deploy (or redeploy after changing protection / env).
+7. Smoke-test:
+   - `https://YOUR-APP.vercel.app/api/ping` → `{"ok":true,...}`
+   - `https://YOUR-APP.vercel.app/api/health` → `{"status":"ok",...}`
 
 **Limits on Vercel:** account/storm data is stored under `/tmp` and can reset between cold starts. For permanent storage, SMS polling, and always-on reliability, use the Docker/VPS path below.
 
