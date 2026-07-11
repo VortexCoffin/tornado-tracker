@@ -57,6 +57,7 @@ This repo is set up for Vercel: Vite frontend + serverless `/api/*` backend.
 | Name | Required | Notes |
 |------|----------|--------|
 | `AUTH_SECRET` | **Yes** | Long random string for login tokens |
+| `DATABASE_URL` | **Yes on Vercel** | Postgres connection string (Neon free tier works) |
 | `PAYPAL_CLIENT_ID` | Optional | Paid subscriptions |
 | `PAYPAL_CLIENT_SECRET` | Optional | Paid subscriptions |
 | `PAYPAL_MODE` | Optional | `live` or `sandbox` |
@@ -64,12 +65,22 @@ This repo is set up for Vercel: Vite frontend + serverless `/api/*` backend.
 | `TWILIO_AUTH_TOKEN` | Optional | SMS alerts |
 | `TWILIO_PHONE_NUMBER` | Optional | SMS alerts |
 
+### Database setup (Neon free — recommended for Vercel)
+
+1. Create a free project at [neon.tech](https://neon.tech)
+2. Copy the connection string (`postgresql://...`)
+3. In Vercel → **Environment Variables** set:
+   - `DATABASE_URL` = that connection string
+4. Redeploy
+
+Tables (`accounts`, `feedback`, `notification_inbox`) are created automatically on first API request.
+
+Without `DATABASE_URL`, the app falls back to local files (fine for `./start.sh` on a VPS, not durable on Vercel serverless).
+
 6. Deploy (or redeploy after changing protection / env).
 7. Smoke-test:
    - `https://YOUR-APP.vercel.app/api/ping` → `{"ok":true,...}`
-   - `https://YOUR-APP.vercel.app/api/health` → `{"status":"ok",...}`
-
-**Limits on Vercel:** account/storm data is stored under `/tmp` and can reset between cold starts. For permanent storage, SMS polling, and always-on reliability, use the Docker/VPS path below.
+   - `https://YOUR-APP.vercel.app/api/health` → includes `"database":{"configured":true,"mode":"postgres","ok":true}`
 
 ```bash
 # Optional: deploy from CLI

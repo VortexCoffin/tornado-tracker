@@ -46,6 +46,7 @@ import {
 import { getCurrentWeather } from "./weather.js";
 import { listFeedback, createFeedback, feedbackStats } from "./feedback.js";
 import { isServerless } from "./paths.js";
+import { dbHealth } from "./db.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FRONTEND_DIST = join(__dirname, "..", "frontend", "dist");
@@ -315,6 +316,7 @@ async function handleRequest(req, res) {
           status: "ok",
           service: "Canada Tornado Tracker",
           smsConfigured: smsConfigured(),
+          database: await dbHealth(),
           cacheAgeMs: cache.fetchedAt
             ? Date.now() - new Date(cache.fetchedAt).getTime()
             : null,
@@ -326,20 +328,20 @@ async function handleRequest(req, res) {
 
     if (url.pathname === "/api/auth/signup" && req.method === "POST") {
       const body = await readJsonBody(req);
-      const result = signup(body);
+      const result = await signup(body);
       sendJson(res, 201, result, req);
       return;
     }
 
     if (url.pathname === "/api/auth/login" && req.method === "POST") {
       const body = await readJsonBody(req);
-      const result = login(body);
+      const result = await login(body);
       sendJson(res, 200, result, req);
       return;
     }
 
     if (url.pathname === "/api/auth/me" && req.method === "GET") {
-      const account = getAccountFromRequest(req);
+      const account = await getAccountFromRequest(req);
       if (!account) {
         sendJson(res, 401, { error: "Not authenticated" }, req);
         return;
@@ -357,7 +359,7 @@ async function handleRequest(req, res) {
     }
 
     if (url.pathname === "/api/account" && req.method === "GET") {
-      const account = getAccountFromRequest(req);
+      const account = await getAccountFromRequest(req);
       if (!account) {
         sendJson(res, 401, { error: "Not authenticated" }, req);
         return;
@@ -380,7 +382,7 @@ async function handleRequest(req, res) {
     }
 
     if (url.pathname === "/api/overlays" && req.method === "GET") {
-      const user = getUserFromRequest(req);
+      const user = await getUserFromRequest(req);
       const tier = user?.subscription?.tier || url.searchParams.get("tier") || "free";
       sendJson(
         res,
@@ -395,13 +397,13 @@ async function handleRequest(req, res) {
     }
 
     if (url.pathname === "/api/account/overlay" && req.method === "PUT") {
-      const userId = getUserIdFromRequest(req);
+      const userId = await getUserIdFromRequest(req);
       if (!userId) {
         sendJson(res, 401, { error: "Not authenticated" }, req);
         return;
       }
       const body = await readJsonBody(req);
-      const account = setAccountOverlay(userId, body);
+      const account = await setAccountOverlay(userId, body);
       sendJson(
         res,
         200,
@@ -420,7 +422,7 @@ async function handleRequest(req, res) {
     }
 
     if (url.pathname === "/api/subscription/subscribe" && req.method === "POST") {
-      const userId = getUserIdFromRequest(req);
+      const userId = await getUserIdFromRequest(req);
       if (!userId) {
         sendJson(res, 401, { error: "Not authenticated" }, req);
         return;
@@ -449,7 +451,7 @@ async function handleRequest(req, res) {
     }
 
     if (url.pathname === "/api/subscription/paypal/create" && req.method === "POST") {
-      const userId = getUserIdFromRequest(req);
+      const userId = await getUserIdFromRequest(req);
       if (!userId) {
         sendJson(res, 401, { error: "Not authenticated" }, req);
         return;
@@ -466,7 +468,7 @@ async function handleRequest(req, res) {
     }
 
     if (url.pathname === "/api/subscription/paypal/complete" && req.method === "POST") {
-      const userId = getUserIdFromRequest(req);
+      const userId = await getUserIdFromRequest(req);
       if (!userId) {
         sendJson(res, 401, { error: "Not authenticated" }, req);
         return;
@@ -524,14 +526,14 @@ async function handleRequest(req, res) {
     }
 
     if (url.pathname === "/api/notifications/preferences") {
-      const userId = getUserIdFromRequest(req);
+      const userId = await getUserIdFromRequest(req);
       if (!userId) {
         sendJson(res, 401, { error: "Not authenticated" }, req);
         return;
       }
 
       if (req.method === "GET") {
-        const user = getAccountById(userId);
+        const user = await getAccountById(userId);
         sendJson(
           res,
           200,
@@ -546,20 +548,20 @@ async function handleRequest(req, res) {
 
       if (req.method === "PUT" || req.method === "PATCH") {
         const body = await readJsonBody(req);
-        const preferences = updatePreferences(userId, body);
+        const preferences = await updatePreferences(userId, body);
         sendJson(res, 200, { preferences, smsConfigured: smsConfigured() }, req);
         return;
       }
     }
 
     if (url.pathname === "/api/notifications" && req.method === "GET") {
-      const userId = getUserIdFromRequest(req);
+      const userId = await getUserIdFromRequest(req);
       if (!userId) {
         sendJson(res, 401, { error: "Not authenticated" }, req);
         return;
       }
 
-      const notifications = getInbox(userId);
+      const notifications = await getInbox(userId);
       sendJson(
         res,
         200,
@@ -574,14 +576,14 @@ async function handleRequest(req, res) {
     }
 
     if (url.pathname === "/api/notifications/read" && req.method === "POST") {
-      const userId = getUserIdFromRequest(req);
+      const userId = await getUserIdFromRequest(req);
       if (!userId) {
         sendJson(res, 401, { error: "Not authenticated" }, req);
         return;
       }
 
       const body = await readJsonBody(req);
-      const notifications = markNotificationsRead(userId, body.notificationId);
+      const notifications = await markNotificationsRead(userId, body.notificationId);
       sendJson(
         res,
         200,
@@ -642,8 +644,8 @@ async function handleRequest(req, res) {
         res,
         200,
         {
-          stats: feedbackStats(),
-          feedback: listFeedback({ rating }),
+          stats: await feedbackStats(),
+          feedback: await listFeedback({ rating }),
         },
         req
       );
@@ -652,13 +654,13 @@ async function handleRequest(req, res) {
 
     if (url.pathname === "/api/feedback" && req.method === "POST") {
       const body = await readJsonBody(req);
-      const item = createFeedback(body);
+      const item = await createFeedback(body);
       sendJson(
         res,
         201,
         {
           feedback: item,
-          stats: feedbackStats(),
+          stats: await feedbackStats(),
         },
         req
       );
@@ -666,19 +668,19 @@ async function handleRequest(req, res) {
     }
 
     if (url.pathname === "/api/storms/posts" && req.method === "GET") {
-      const userId = getUserIdFromRequest(req);
-      sendJson(res, 200, { posts: listPosts(userId) }, req);
+      const userId = await getUserIdFromRequest(req);
+      sendJson(res, 200, { posts: await listPosts(userId) }, req);
       return;
     }
 
     if (url.pathname === "/api/storms/posts" && req.method === "POST") {
-      const userId = getUserIdFromRequest(req);
+      const userId = await getUserIdFromRequest(req);
       if (!userId) {
         sendJson(res, 401, { error: "Not authenticated" }, req);
         return;
       }
       const body = await readJsonBody(req);
-      const post = createPost(userId, body);
+      const post = await createPost(userId, body);
       sendJson(res, 201, { post }, req);
       return;
     }
@@ -698,21 +700,21 @@ async function handleRequest(req, res) {
         return;
       }
 
-      const userId = getUserIdFromRequest(req);
+      const userId = await getUserIdFromRequest(req);
       if (!userId) {
         sendJson(res, 401, { error: "Not authenticated" }, req);
         return;
       }
 
       if (action === "/like" && req.method === "POST") {
-        const post = toggleLike(postId, userId);
+        const post = await toggleLike(postId, userId);
         sendJson(res, 200, { post }, req);
         return;
       }
 
       if (action === "/comments" && req.method === "POST") {
         const body = await readJsonBody(req);
-        const post = addComment(postId, userId, body.text);
+        const post = await addComment(postId, userId, body.text);
         sendJson(res, 200, { post }, req);
         return;
       }

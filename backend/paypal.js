@@ -194,7 +194,7 @@ export async function createPayPalSubscription(userId, tierId, returnUrl, cancel
     throw new Error("PayPal is not configured on the server");
   }
 
-  const account = getAccountById(userId);
+  const account = await getAccountById(userId);
   if (!account) throw new Error("Account not found");
 
   const planId = await ensurePlanForTier(tierId);
@@ -275,7 +275,8 @@ export async function completePayPalSubscription(userId, subscriptionId) {
     throw new Error(`PayPal subscription status is ${paypalSubscription.status}`);
   }
 
-  const account = getAccountById(userId);
+  const account = await getAccountById(userId);
+  if (!account) throw new Error("Account not found");
   const allowedOverlays = listOverlaysForTier(tierId)
     .filter((item) => item.unlocked && item.type === "base")
     .map((item) => item.id);
@@ -284,7 +285,7 @@ export async function completePayPalSubscription(userId, subscriptionId) {
     ? account.preferences.mapOverlay
     : "standard";
 
-  const updated = updateAccount(userId, {
+  const updated = await updateAccount(userId, {
     subscription: subscriptionFromPayPal(tierId, paypalSubscription),
     preferences: { ...account.preferences, mapOverlay },
   });
@@ -308,7 +309,7 @@ export async function cancelPayPalSubscription(subscriptionId) {
 }
 
 export async function downgradeToFree(userId) {
-  const account = getAccountById(userId);
+  const account = await getAccountById(userId);
   if (!account) throw new Error("Account not found");
 
   if (account.subscription?.paypalSubscriptionId) {

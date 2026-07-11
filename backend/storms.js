@@ -38,13 +38,23 @@ function writePosts(posts) {
   writeFileSync(POSTS_FILE, JSON.stringify(posts, null, 2));
 }
 
-function publicAuthor(userId) {
-  const account = getAccountById(userId);
+async function publicAuthor(userId) {
+  const account = await getAccountById(userId);
   if (!account) return { id: userId, name: "Unknown user" };
   return { id: account.id, name: account.name };
 }
 
-function publicPost(post, userId) {
+async function publicPost(post, userId) {
+  const author = await publicAuthor(post.userId);
+  const comments = await Promise.all(
+    (post.comments || []).map(async (comment) => ({
+      id: comment.id,
+      text: comment.text,
+      createdAt: comment.createdAt,
+      author: await publicAuthor(comment.userId),
+    }))
+  );
+
   return {
     id: post.id,
     caption: post.caption,
@@ -52,17 +62,12 @@ function publicPost(post, userId) {
     province: post.province || null,
     imageUrl: `/api/storms/posts/${post.id}/image`,
     createdAt: post.createdAt,
-    author: publicAuthor(post.userId),
+    author,
     likeCount: post.likes.length,
     commentCount: post.comments.length,
     likedByMe: userId ? post.likes.includes(userId) : false,
     canDelete: userId ? post.userId === userId : false,
-    comments: post.comments.map((comment) => ({
-      id: comment.id,
-      text: comment.text,
-      createdAt: comment.createdAt,
-      author: publicAuthor(comment.userId),
-    })),
+    comments,
   };
 }
 
@@ -80,23 +85,23 @@ function saveImageFromDataUrl(dataUrl) {
   return { buffer, ext, mime };
 }
 
-export function listPosts(userId) {
+export async function listPosts(userId) {
   const posts = readPosts()
     .filter((post) => !post.hidden)
     .sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
-  return posts.map((post) => publicPost(post, userId));
+  return Promise.all(posts.map((post) => publicPost(post, userId)));
 }
 
-export function getPost(postId, userId) {
+export async function getPost(postId, userId) {
   const post = readPosts().find((entry) => entry.id === postId);
   if (!post) throw new Error("Post not found");
   return publicPost(post, userId);
 }
 
-export function createPost(userId, { caption, imageData, location, province }) {
-  const account = getAccountById(userId);
+export async function createPost(userId, { caption, imageData, location, province }) {
+  const account = await getAccountById(userId);
   if (!account) throw new Error("Account not found");
 
   const text = String(caption || "").trim();
@@ -126,7 +131,7 @@ export function createPost(userId, { caption, imageData, location, province }) {
   const posts = readPosts();
   posts.unshift(post);
   writePosts(posts);
-  return publicPost(post, userId);
+  return publicPost(post, userId); // async
 }
 
 export function getPostImage(postId) {
@@ -142,7 +147,7 @@ export function getPostImage(postId) {
   };
 }
 
-export function toggleLike(postId, userId) {
+export async function toggleLike(postId, userId) {
   const posts = readPosts();
   const index = posts.findIndex((entry) => entry.id === postId);
   if (index === -1) throw new Error("Post not found");
@@ -203,7 +208,7 @@ export function reportPost(postId, userId, reason) {
   return { reported: true, reportCount };
 }
 
-export function addComment(postId, userId, text) {
+export async function addComment(postId, userId, text) {
   const posts = readPosts();
   const index = posts.findIndex((entry) => entry.id === postId);
   if (index === -1) throw new Error("Post not found");

@@ -54,7 +54,6 @@ function deriveBackupKey() {
   return crypto.scryptSync(EFFECTIVE_TOKEN_SECRET, BACKUP_SALT, 32);
 }
 
-/** Encrypt full account (incl. password hash) for browser localStorage backup. */
 export function sealAccount(account) {
   if (!account?.id || !account?.email) return null;
 
@@ -81,7 +80,6 @@ export function sealAccount(account) {
   return Buffer.concat([iv, tag, encrypted]).toString("base64url");
 }
 
-/** Decrypt account backup from client. */
 export function openAccountBackup(blob) {
   if (!blob || typeof blob !== "string") return null;
   try {
@@ -152,37 +150,29 @@ function getTokenPayloadFromRequest(req) {
 }
 
 function backupFromRequest(req) {
-  return (
-    req.headers["x-account-backup"] ||
-    req.headers["X-Account-Backup"] ||
-    null
-  );
+  return req.headers["x-account-backup"] || req.headers["X-Account-Backup"] || null;
 }
 
-/**
- * Load account for this request: memory/disk → encrypted backup header → JWT shell.
- */
-export function resolveAccountFromRequest(req) {
+export async function resolveAccountFromRequest(req) {
   const payload = getTokenPayloadFromRequest(req);
   if (!payload?.sub) return null;
 
-  let account = getAccountById(payload.sub);
+  let account = await getAccountById(payload.sub);
 
-  // Prefer encrypted backup when local store is empty or missing password
   if (!account?.passwordHash) {
     const restored = openAccountBackup(backupFromRequest(req));
     if (restored && restored.id === payload.sub) {
-      account = saveAccountFromBackup(restored);
+      account = await saveAccountFromBackup(restored);
     } else if (
       restored &&
       restored.email === String(payload.email || "").toLowerCase()
     ) {
-      account = saveAccountFromBackup(restored);
+      account = await saveAccountFromBackup(restored);
     }
   }
 
   if (!account) {
-    account = rehydrateAccountFromToken(payload);
+    account = await rehydrateAccountFromToken(payload);
   }
 
   return account;
@@ -198,21 +188,21 @@ export function sessionForAccount(account) {
 
 export { readUsers, writeUsers };
 
-export function getUserIdFromRequest(req) {
-  const account = resolveAccountFromRequest(req);
+export async function getUserIdFromRequest(req) {
+  const account = await resolveAccountFromRequest(req);
   return account?.id || null;
 }
 
-export function getUserFromRequest(req) {
-  const account = resolveAccountFromRequest(req);
+export async function getUserFromRequest(req) {
+  const account = await resolveAccountFromRequest(req);
   return account ? publicAccount(account) : null;
 }
 
-export function getAccountFromRequest(req) {
+export async function getAccountFromRequest(req) {
   return resolveAccountFromRequest(req);
 }
 
-export function signup({ email, password, name }) {
+export async function signup({ email, password, name }) {
   const normalizedEmail = String(email || "").trim().toLowerCase();
   const displayName = String(name || "").trim();
   const plainPassword = String(password || "");
@@ -227,20 +217,20 @@ export function signup({ email, password, name }) {
     throw new Error("Password must be at least 8 characters");
   }
 
-  const existing = getAccountByEmail(normalizedEmail);
+  const existing = await getAccountByEmail(normalizedEmail);
   if (existing && !existing.rehydrated && existing.passwordHash) {
     throw new Error("An account with this email already exists");
   }
 
   let account;
   if (existing?.rehydrated || (existing && !existing.passwordHash)) {
-    account = updateAccount(existing.id, {
+    account = await updateAccount(existing.id, {
       name: displayName,
       passwordHash: hashPassword(plainPassword),
       rehydrated: false,
     });
   } else {
-    account = createAccount({
+    account = await createAccount({
       email: normalizedEmail,
       name: displayName,
       passwordHash: hashPassword(plainPassword),
@@ -250,7 +240,7 @@ export function signup({ email, password, name }) {
   return sessionForAccount(account);
 }
 
-export function login({ email, password, accountBackup }) {
+export async function login({ email, password, accountBackup }) {
   const normalizedEmail = String(email || "").trim().toLowerCase();
   const plainPassword = String(password || "");
 
@@ -258,13 +248,12 @@ export function login({ email, password, accountBackup }) {
     throw new Error("Email and password are required");
   }
 
-  let account = getAccountByEmail(normalizedEmail);
+  let account = await getAccountByEmail(normalizedEmail);
 
-  // Restore from browser backup when serverless storage was wiped
   if (!account || !account.passwordHash) {
     const restored = openAccountBackup(accountBackup);
     if (restored && restored.email === normalizedEmail && restored.passwordHash) {
-      account = saveAccountFromBackup(restored);
+      account = await saveAccountFromBackup(restored);
     }
   }
 
@@ -282,8 +271,6 @@ export function login({ email, password, accountBackup }) {
     throw new Error("Invalid email or password");
   }
 
-  // Ensure this instance has the account for subsequent requests
-  account = saveAccountFromBackup(account);
-
+  account = await saveAccountFromBackup(account);
   return sessionForAccount(account);
 }

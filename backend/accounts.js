@@ -9,13 +9,13 @@ import {
   OVERLAYS,
 } from "./subscriptions.js";
 import { getDataDir } from "./paths.js";
+import { getDb, isDatabaseEnabled } from "./db.js";
 
 const DATA_DIR = getDataDir();
 const ACCOUNTS_DIR = join(DATA_DIR, "accounts");
 const USERS_FILE = join(DATA_DIR, "users.json");
 const ACCOUNTS_INDEX = join(ACCOUNTS_DIR, "index.json");
 
-/** Survives across requests on the same warm serverless instance */
 function memoryStore() {
   if (!globalThis.__ttAccountMem) {
     globalThis.__ttAccountMem = new Map();
@@ -54,14 +54,19 @@ function writeLegacyUsers(users) {
   writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
 }
 
-function normalizeAccount(raw) {
+export function normalizeAccount(raw) {
   return {
     id: raw.id,
     email: raw.email,
     name: raw.name,
-    passwordHash: raw.passwordHash,
-    createdAt: raw.createdAt,
-    updatedAt: raw.updatedAt || raw.createdAt,
+    passwordHash: raw.passwordHash ?? raw.password_hash ?? "",
+    createdAt: raw.createdAt || raw.created_at || new Date().toISOString(),
+    updatedAt:
+      raw.updatedAt ||
+      raw.updated_at ||
+      raw.createdAt ||
+      raw.created_at ||
+      new Date().toISOString(),
     rehydrated: Boolean(raw.rehydrated),
     subscription: {
       ...defaultSubscription(),
@@ -84,31 +89,95 @@ function normalizeAccount(raw) {
       alertAreas: [],
       ...(raw.notifications || {}),
     },
-    sentAlertIds: raw.sentAlertIds || [],
+    sentAlertIds: raw.sentAlertIds || raw.sent_alert_ids || [],
   };
 }
 
-function saveAccount(account) {
+function rowToAccount(row) {
+  if (!row) return null;
+  return normalizeAccount({
+    id: row.id,
+    email: row.email,
+    name: row.name,
+    passwordHash: row.password_hash,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    rehydrated: row.rehydrated,
+    subscription: row.subscription,
+    preferences: row.preferences,
+    notifications: row.notifications,
+    sentAlertIds: row.sent_alert_ids,
+  });
+}
+
+async function dbSaveAccount(account) {
+  const sql = await getDb();
+  const normalized = normalizeAccount(account);
+  normalized.updatedAt = new Date().toISOString();
+
+  await sql`
+    INSERT INTO accounts (
+      id, email, name, password_hash, created_at, updated_at, rehydrated,
+      subscription, preferences, notifications, sent_alert_ids
+    ) VALUES (
+      ${normalized.id},
+      ${normalized.email},
+      ${normalized.name},
+      ${normalized.passwordHash || ""},
+      ${normalized.createdAt},
+      ${normalized.updatedAt},
+      ${Boolean(normalized.rehydrated)},
+      ${sql.json(normalized.subscription)},
+      ${sql.json(normalized.preferences)},
+      ${sql.json(normalized.notifications)},
+      ${sql.json(normalized.sentAlertIds || [])}
+    )
+    ON CONFLICT (id) DO UPDATE SET
+      email = EXCLUDED.email,
+      name = EXCLUDED.name,
+      password_hash = EXCLUDED.password_hash,
+      updated_at = EXCLUDED.updated_at,
+      rehydrated = EXCLUDED.rehydrated,
+      subscription = EXCLUDED.subscription,
+      preferences = EXCLUDED.preferences,
+      notifications = EXCLUDED.notifications,
+      sent_alert_ids = EXCLUDED.sent_alert_ids
+  `;
+
+  memoryStore().set(normalized.id, normalized);
+  return normalized;
+}
+
+function fileSaveAccount(account) {
   const normalized = normalizeAccount(account);
   normalized.updatedAt = new Date().toISOString();
   try {
     writeFileSync(accountPath(normalized.id), JSON.stringify(normalized, null, 2));
-
     const index = readIndex();
     if (!index.includes(normalized.id)) {
       index.push(normalized.id);
       writeIndex(index);
     }
   } catch (error) {
-    // /tmp or read-only FS can fail on some platforms; memory still works for the instance
     console.warn("Account disk write failed:", error.message);
   }
-
   memoryStore().set(normalized.id, normalized);
   return normalized;
 }
 
-function readAccountFile(id) {
+async function saveAccount(account) {
+  if (isDatabaseEnabled()) {
+    try {
+      return await dbSaveAccount(account);
+    } catch (error) {
+      console.error("Postgres account save failed, falling back to file:", error.message);
+      return fileSaveAccount(account);
+    }
+  }
+  return fileSaveAccount(account);
+}
+
+function fileReadAccount(id) {
   const mem = memoryStore();
   if (mem.has(id)) return mem.get(id);
 
@@ -123,38 +192,66 @@ function readAccountFile(id) {
   }
 }
 
+async function dbReadAccount(id) {
+  const mem = memoryStore();
+  if (mem.has(id)) return mem.get(id);
+
+  const sql = await getDb();
+  const rows = await sql`SELECT * FROM accounts WHERE id = ${id} LIMIT 1`;
+  const account = rowToAccount(rows[0]);
+  if (account) mem.set(id, account);
+  return account;
+}
+
 function migrateLegacyUsers() {
+  if (isDatabaseEnabled()) return;
   const legacyUsers = readLegacyUsers();
   if (legacyUsers.length === 0) return;
 
   for (const legacy of legacyUsers) {
-    if (readAccountFile(legacy.id)) continue;
-    saveAccount(legacy);
+    if (fileReadAccount(legacy.id)) continue;
+    fileSaveAccount(legacy);
   }
 
   writeLegacyUsers([]);
 }
 
-export function readUsers() {
+export async function readUsers() {
+  if (isDatabaseEnabled()) {
+    const sql = await getDb();
+    const rows = await sql`SELECT * FROM accounts ORDER BY created_at ASC`;
+    return rows.map(rowToAccount);
+  }
+
   migrateLegacyUsers();
   return readIndex()
-    .map((id) => readAccountFile(id))
+    .map((id) => fileReadAccount(id))
     .filter(Boolean);
 }
 
-export function writeUsers(users) {
+export async function writeUsers(users) {
   for (const user of users) {
-    saveAccount(user);
+    await saveAccount(user);
   }
 }
 
-export function getAccountById(id) {
+export async function getAccountById(id) {
   if (!id) return null;
+
+  if (isDatabaseEnabled()) {
+    try {
+      return await dbReadAccount(id);
+    } catch (error) {
+      console.error("Postgres getAccountById failed:", error.message);
+      return fileReadAccount(id);
+    }
+  }
+
   migrateLegacyUsers();
-  return readAccountFile(id);
+  return fileReadAccount(id);
 }
 
-export function getAccountByEmail(email) {
+export async function getAccountByEmail(email) {
   const normalized = String(email || "").trim().toLowerCase();
   if (!normalized) return null;
 
@@ -162,25 +259,32 @@ export function getAccountByEmail(email) {
     if (account.email === normalized) return account;
   }
 
-  return readUsers().find((account) => account.email === normalized) || null;
+  if (isDatabaseEnabled()) {
+    try {
+      const sql = await getDb();
+      const rows =
+        await sql`SELECT * FROM accounts WHERE lower(email) = ${normalized} LIMIT 1`;
+      const account = rowToAccount(rows[0]);
+      if (account) memoryStore().set(account.id, account);
+      return account;
+    } catch (error) {
+      console.error("Postgres getAccountByEmail failed:", error.message);
+    }
+  }
+
+  const users = await readUsers();
+  return users.find((account) => account.email === normalized) || null;
 }
 
-/**
- * Recreate an account shell when the JWT is valid but disk storage was lost
- * (common on Vercel serverless: /tmp is per-instance and ephemeral).
- */
-export function rehydrateAccountFromToken(payload) {
+export async function rehydrateAccountFromToken(payload) {
   if (!payload?.sub || !payload?.email) return null;
 
-  const existing = getAccountById(payload.sub);
+  const existing = await getAccountById(payload.sub);
   if (existing) return existing;
 
   const email = String(payload.email).trim().toLowerCase();
-  const byEmail = getAccountByEmail(email);
-  if (byEmail) {
-    // Same email under a different id on this instance — prefer stored row
-    return byEmail;
-  }
+  const byEmail = await getAccountByEmail(email);
+  if (byEmail) return byEmail;
 
   return saveAccount({
     id: payload.sub,
@@ -207,8 +311,7 @@ export function rehydrateAccountFromToken(payload) {
   });
 }
 
-/** Restore a full account record (from encrypted browser backup). */
-export function saveAccountFromBackup(raw) {
+export async function saveAccountFromBackup(raw) {
   if (!raw?.id || !raw?.email) {
     throw new Error("Invalid account backup");
   }
@@ -238,8 +341,8 @@ export function saveAccountFromBackup(raw) {
   });
 }
 
-export function createAccount({ email, passwordHash, name }) {
-  const account = saveAccount({
+export async function createAccount({ email, passwordHash, name }) {
+  return saveAccount({
     id: crypto.randomUUID(),
     email,
     name,
@@ -256,12 +359,10 @@ export function createAccount({ email, passwordHash, name }) {
     },
     sentAlertIds: [],
   });
-
-  return account;
 }
 
-export function updateAccount(id, updates) {
-  const account = getAccountById(id);
+export async function updateAccount(id, updates) {
+  const account = await getAccountById(id);
   if (!account) throw new Error("Account not found");
 
   const next = {
@@ -276,6 +377,9 @@ export function updateAccount(id, updates) {
 
   if (updates.rehydrated === false) {
     next.rehydrated = false;
+  }
+  if (updates.sentAlertIds) {
+    next.sentAlertIds = updates.sentAlertIds;
   }
 
   return saveAccount(next);
@@ -293,12 +397,14 @@ export function publicAccount(account) {
     subscription: account.subscription,
     preferences: account.preferences,
     overlays,
-    unlockedOverlayIds: overlays.filter((item) => item.unlocked).map((item) => item.id),
+    unlockedOverlayIds: overlays
+      .filter((item) => item.unlocked)
+      .map((item) => item.id),
   };
 }
 
-export function setAccountOverlay(id, updates = {}) {
-  const account = getAccountById(id);
+export async function setAccountOverlay(id, updates = {}) {
+  const account = await getAccountById(id);
   if (!account) throw new Error("Account not found");
 
   const tier = account.subscription?.tier || "free";
@@ -332,8 +438,8 @@ export function setAccountOverlay(id, updates = {}) {
   return updateAccount(id, { preferences: nextPreferences });
 }
 
-export function changeSubscription(id, tierId) {
-  const account = getAccountById(id);
+export async function changeSubscription(id, tierId) {
+  const account = await getAccountById(id);
   if (!account) throw new Error("Account not found");
 
   const subscription = subscribeToTier(account.subscription?.tier, tierId);

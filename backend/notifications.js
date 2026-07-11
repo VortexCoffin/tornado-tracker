@@ -2,9 +2,14 @@ import "./env.js";
 import crypto from "node:crypto";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { readUsers, writeUsers } from "./accounts.js";
+import {
+  readUsers,
+  getAccountById,
+  updateAccount,
+} from "./accounts.js";
 import { isTornadoOnGround, matchesAlertArea } from "./alerts.js";
 import { getDataDir } from "./paths.js";
+import { getDb, isDatabaseEnabled } from "./db.js";
 
 const DATA_DIR = getDataDir();
 const INBOX_FILE = join(DATA_DIR, "notifications.json");
@@ -22,14 +27,53 @@ function ensureInboxFile() {
   if (!existsSync(INBOX_FILE)) writeFileSync(INBOX_FILE, "{}");
 }
 
-function readInbox() {
+function fileReadInbox() {
   ensureInboxFile();
   return JSON.parse(readFileSync(INBOX_FILE, "utf8"));
 }
 
-function writeInbox(inbox) {
+function fileWriteInbox(inbox) {
   ensureInboxFile();
   writeFileSync(INBOX_FILE, JSON.stringify(inbox, null, 2));
+}
+
+async function readUserItems(userId) {
+  if (isDatabaseEnabled()) {
+    try {
+      const sql = await getDb();
+      const rows =
+        await sql`SELECT items FROM notification_inbox WHERE user_id = ${userId} LIMIT 1`;
+      const items = rows[0]?.items;
+      return Array.isArray(items) ? items : [];
+    } catch (error) {
+      console.error("Postgres inbox read failed:", error.message);
+    }
+  }
+
+  const inbox = fileReadInbox();
+  return inbox[userId] || [];
+}
+
+async function writeUserItems(userId, items) {
+  if (isDatabaseEnabled()) {
+    try {
+      const sql = await getDb();
+      await sql`
+        INSERT INTO notification_inbox (user_id, items, updated_at)
+        VALUES (${userId}, ${sql.json(items)}, NOW())
+        ON CONFLICT (user_id) DO UPDATE SET
+          items = EXCLUDED.items,
+          updated_at = NOW()
+      `;
+      return;
+    } catch (error) {
+      console.error("Postgres inbox write failed:", error.message);
+    }
+  }
+
+  const inbox = fileReadInbox();
+  inbox[userId] = items;
+  fileWriteInbox(inbox);
 }
 
 export function classifyAlert(alert) {
@@ -66,17 +110,21 @@ export function getPreferences(user) {
   return { ...defaultPreferences(), ...(user.notifications || {}) };
 }
 
-export function updatePreferences(userId, updates) {
-  const users = readUsers();
-  const index = users.findIndex((user) => user.id === userId);
-  if (index === -1) throw new Error("User not found");
+export async function updatePreferences(userId, updates) {
+  const account = await getAccountById(userId);
+  if (!account) throw new Error("User not found");
 
-  const current = getPreferences(users[index]);
-  const phoneNumber = updates.phoneNumber !== undefined
-    ? String(updates.phoneNumber).trim()
-    : current.phoneNumber;
+  const current = getPreferences(account);
+  const phoneNumber =
+    updates.phoneNumber !== undefined
+      ? String(updates.phoneNumber).trim()
+      : current.phoneNumber;
 
-  if (updates.smsEnabled && phoneNumber && !/^\+[1-9]\d{7,14}$/.test(phoneNumber)) {
+  if (
+    updates.smsEnabled &&
+    phoneNumber &&
+    !/^\+[1-9]\d{7,14}$/.test(phoneNumber)
+  ) {
     throw new Error("Phone number must be in E.164 format, e.g. +15551234567");
   }
 
@@ -85,53 +133,51 @@ export function updatePreferences(userId, updates) {
       ? normalizeAlertAreas(updates.alertAreas)
       : current.alertAreas;
 
-  users[index].notifications = {
+  const notifications = {
     ...current,
     ...updates,
     phoneNumber,
     alertAreas,
   };
 
-  if (!users[index].sentAlertIds) users[index].sentAlertIds = [];
+  const updated = await updateAccount(userId, {
+    notifications,
+    sentAlertIds: account.sentAlertIds || [],
+  });
 
-  writeUsers(users);
-  return getPreferences(users[index]);
+  return getPreferences(updated);
 }
 
-export function getInbox(userId) {
-  const inbox = readInbox();
-  return (inbox[userId] || []).sort(
+export async function getInbox(userId) {
+  const items = await readUserItems(userId);
+  return items.sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
 }
 
-function addInAppNotification(userId, payload) {
-  const inbox = readInbox();
+async function addInAppNotification(userId, payload) {
+  const items = await readUserItems(userId);
   const entry = {
     id: crypto.randomUUID(),
     read: false,
     createdAt: new Date().toISOString(),
     ...payload,
   };
-
-  inbox[userId] = [entry, ...(inbox[userId] || [])].slice(0, 100);
-  writeInbox(inbox);
+  const next = [entry, ...items].slice(0, 100);
+  await writeUserItems(userId, next);
   return entry;
 }
 
-export function markNotificationsRead(userId, notificationId) {
-  const inbox = readInbox();
-  const items = inbox[userId] || [];
-
-  inbox[userId] = items.map((item) => {
+export async function markNotificationsRead(userId, notificationId) {
+  const items = await readUserItems(userId);
+  const next = items.map((item) => {
     if (!notificationId || item.id === notificationId) {
       return { ...item, read: true };
     }
     return item;
   });
-
-  writeInbox(inbox);
-  return inbox[userId];
+  await writeUserItems(userId, next);
+  return next;
 }
 
 function buildMessage(alert, type) {
@@ -186,19 +232,19 @@ async function sendSms(to, body) {
   return { sent: true };
 }
 
-function markAlertSent(userId, alertId) {
-  const users = readUsers();
-  const index = users.findIndex((user) => user.id === userId);
-  if (index === -1) return;
+async function markAlertSent(userId, alertId) {
+  const account = await getAccountById(userId);
+  if (!account) return;
 
-  const sent = new Set(users[index].sentAlertIds || []);
+  const sent = new Set(account.sentAlertIds || []);
   sent.add(alertId);
-  users[index].sentAlertIds = [...sent].slice(-500);
-  writeUsers(users);
+  await updateAccount(userId, {
+    sentAlertIds: [...sent].slice(-500),
+  });
 }
 
 export async function processAlertsForNotifications(alerts) {
-  const users = readUsers();
+  const users = await readUsers();
   const notifyable = alerts
     .map((alert) => ({ alert, type: classifyAlert(alert) }))
     .filter((entry) => entry.type);
@@ -214,7 +260,9 @@ export async function processAlertsForNotifications(alerts) {
     for (const { alert, type } of notifyable) {
       if (sent.has(alert.id)) continue;
       const hasAreaFilter = prefs.alertAreas?.length > 0;
-      if (!hasAreaFilter && !matchesProvinceFilter(alert, prefs.provinces)) continue;
+      if (!hasAreaFilter && !matchesProvinceFilter(alert, prefs.provinces)) {
+        continue;
+      }
       if (!matchesAlertArea(alert, prefs.alertAreas)) continue;
 
       const titles = {
@@ -234,7 +282,7 @@ export async function processAlertsForNotifications(alerts) {
 
       try {
         if (prefs.inAppEnabled) {
-          addInAppNotification(user.id, {
+          await addInAppNotification(user.id, {
             alertId: alert.id,
             type,
             title,
@@ -250,7 +298,7 @@ export async function processAlertsForNotifications(alerts) {
           await sendSms(prefs.phoneNumber, body);
         }
 
-        markAlertSent(user.id, alert.id);
+        await markAlertSent(user.id, alert.id);
         results.push({ userId: user.id, alertId: alert.id, type });
       } catch (error) {
         console.error(`Notification failed for user ${user.id}:`, error.message);
