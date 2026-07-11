@@ -5,15 +5,10 @@ import Header from '../components/Header'
 import { useAuth } from '../context/AuthContext'
 import { normalizeAlertArea } from '../utils/alertAreas'
 import { useNotifications } from '../context/NotificationContext'
+import { authHeaders, apiErrorMessage } from '../utils/api'
 import '../auth.css'
 
-const TOKEN_KEY = 'ctt_auth_token'
 const PROVINCES = ['AB', 'BC', 'MB', 'NB', 'NL', 'NS', 'NT', 'NU', 'ON', 'PE', 'QC', 'SK', 'YT']
-
-function authHeaders() {
-  const token = localStorage.getItem(TOKEN_KEY)
-  return token ? { Authorization: `Bearer ${token}` } : {}
-}
 
 export default function SettingsPage() {
   const { user } = useAuth()
@@ -47,7 +42,7 @@ export default function SettingsPage() {
         setAlertAreas(prefs.alertAreas || [])
       })
       .catch((err) => {
-        setError(err.response?.data?.message || 'Could not load settings')
+        setError(apiErrorMessage(err, 'Could not load settings'))
       })
       .finally(() => setLoading(false))
   }, [user])
@@ -112,7 +107,7 @@ export default function SettingsPage() {
 
       setMessage('Notification settings saved.')
     } catch (err) {
-      setError(err.response?.data?.message || err.message || 'Could not save settings')
+      setError(apiErrorMessage(err, 'Could not save settings'))
     } finally {
       setSaving(false)
     }

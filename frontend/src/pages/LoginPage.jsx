@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import TornadoLogo from '../components/TornadoLogo'
+import { apiErrorMessage } from '../utils/api'
 import '../auth.css'
 
 export default function LoginPage() {
@@ -21,7 +22,7 @@ export default function LoginPage() {
       await login(email, password)
       navigate('/')
     } catch (err) {
-      setError(err.response?.data?.message || 'Login failed')
+      setError(apiErrorMessage(err, 'Login failed'))
     } finally {
       setLoading(false)
     }

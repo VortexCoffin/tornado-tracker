@@ -9,8 +9,11 @@ createRoot(document.getElementById('root')).render(
   </StrictMode>,
 )
 
+// Clear any old service worker left from earlier builds (sw.js is not shipped)
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {})
-  })
+  navigator.serviceWorker.getRegistrations?.().then((registrations) => {
+    for (const registration of registrations) {
+      registration.unregister().catch(() => {})
+    }
+  }).catch(() => {})
 }

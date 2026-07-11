@@ -3,6 +3,7 @@ import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import axios from 'axios'
 import Header from '../components/Header'
 import { useAuth } from '../context/AuthContext'
+import { apiErrorMessage } from '../utils/api'
 import '../auth.css'
 
 export default function SubscribePage() {
@@ -47,7 +48,7 @@ export default function SubscribePage() {
       })
       .catch((err) => {
         if (!active) return
-        setError(err.response?.data?.message || 'PayPal activation failed')
+        setError(apiErrorMessage(err, 'PayPal activation failed'))
       })
       .finally(() => {
         if (active) setUpgrading(null)
@@ -78,7 +79,7 @@ export default function SubscribePage() {
       await refreshAccount()
       setMessage('You are now on the Free plan.')
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not switch to Free')
+      setError(apiErrorMessage(err, 'Could not switch to Free'))
     } finally {
       setUpgrading(null)
     }
@@ -96,7 +97,7 @@ export default function SubscribePage() {
     try {
       await startPayPalCheckout(tier)
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not start PayPal checkout')
+      setError(apiErrorMessage(err, 'Could not start PayPal checkout'))
       setUpgrading(null)
     }
   }

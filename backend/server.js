@@ -343,7 +343,7 @@ async function handleRequest(req, res) {
     if (url.pathname === "/api/auth/me" && req.method === "GET") {
       const account = await getAccountFromRequest(req);
       if (!account) {
-        sendJson(res, 401, { error: "Not authenticated" }, req);
+        sendJson(res, 401, { error: "Not authenticated", message: "Not authenticated" }, req);
         return;
       }
       sendJson(
@@ -361,7 +361,7 @@ async function handleRequest(req, res) {
     if (url.pathname === "/api/account" && req.method === "GET") {
       const account = await getAccountFromRequest(req);
       if (!account) {
-        sendJson(res, 401, { error: "Not authenticated" }, req);
+        sendJson(res, 401, { error: "Not authenticated", message: "Not authenticated" }, req);
         return;
       }
       sendJson(
@@ -399,7 +399,7 @@ async function handleRequest(req, res) {
     if (url.pathname === "/api/account/overlay" && req.method === "PUT") {
       const userId = await getUserIdFromRequest(req);
       if (!userId) {
-        sendJson(res, 401, { error: "Not authenticated" }, req);
+        sendJson(res, 401, { error: "Not authenticated", message: "Not authenticated" }, req);
         return;
       }
       const body = await readJsonBody(req);
@@ -424,7 +424,7 @@ async function handleRequest(req, res) {
     if (url.pathname === "/api/subscription/subscribe" && req.method === "POST") {
       const userId = await getUserIdFromRequest(req);
       if (!userId) {
-        sendJson(res, 401, { error: "Not authenticated" }, req);
+        sendJson(res, 401, { error: "Not authenticated", message: "Not authenticated" }, req);
         return;
       }
       const body = await readJsonBody(req);
@@ -432,7 +432,7 @@ async function handleRequest(req, res) {
         sendJson(
           res,
           400,
-          { error: "Paid plans require PayPal checkout" },
+          { error: "Paid plans require PayPal checkout", message: "Paid plans require PayPal checkout" },
           req
         );
         return;
@@ -453,7 +453,7 @@ async function handleRequest(req, res) {
     if (url.pathname === "/api/subscription/paypal/create" && req.method === "POST") {
       const userId = await getUserIdFromRequest(req);
       if (!userId) {
-        sendJson(res, 401, { error: "Not authenticated" }, req);
+        sendJson(res, 401, { error: "Not authenticated", message: "Not authenticated" }, req);
         return;
       }
       const body = await readJsonBody(req);
@@ -470,7 +470,7 @@ async function handleRequest(req, res) {
     if (url.pathname === "/api/subscription/paypal/complete" && req.method === "POST") {
       const userId = await getUserIdFromRequest(req);
       if (!userId) {
-        sendJson(res, 401, { error: "Not authenticated" }, req);
+        sendJson(res, 401, { error: "Not authenticated", message: "Not authenticated" }, req);
         return;
       }
       const body = await readJsonBody(req);
@@ -528,7 +528,7 @@ async function handleRequest(req, res) {
     if (url.pathname === "/api/notifications/preferences") {
       const userId = await getUserIdFromRequest(req);
       if (!userId) {
-        sendJson(res, 401, { error: "Not authenticated" }, req);
+        sendJson(res, 401, { error: "Not authenticated", message: "Not authenticated" }, req);
         return;
       }
 
@@ -557,7 +557,7 @@ async function handleRequest(req, res) {
     if (url.pathname === "/api/notifications" && req.method === "GET") {
       const userId = await getUserIdFromRequest(req);
       if (!userId) {
-        sendJson(res, 401, { error: "Not authenticated" }, req);
+        sendJson(res, 401, { error: "Not authenticated", message: "Not authenticated" }, req);
         return;
       }
 
@@ -578,7 +578,7 @@ async function handleRequest(req, res) {
     if (url.pathname === "/api/notifications/read" && req.method === "POST") {
       const userId = await getUserIdFromRequest(req);
       if (!userId) {
-        sendJson(res, 401, { error: "Not authenticated" }, req);
+        sendJson(res, 401, { error: "Not authenticated", message: "Not authenticated" }, req);
         return;
       }
 
@@ -676,7 +676,7 @@ async function handleRequest(req, res) {
     if (url.pathname === "/api/storms/posts" && req.method === "POST") {
       const userId = await getUserIdFromRequest(req);
       if (!userId) {
-        sendJson(res, 401, { error: "Not authenticated" }, req);
+        sendJson(res, 401, { error: "Not authenticated", message: "Not authenticated" }, req);
         return;
       }
       const body = await readJsonBody(req);
@@ -702,7 +702,7 @@ async function handleRequest(req, res) {
 
       const userId = await getUserIdFromRequest(req);
       if (!userId) {
-        sendJson(res, 401, { error: "Not authenticated" }, req);
+        sendJson(res, 401, { error: "Not authenticated", message: "Not authenticated" }, req);
         return;
       }
 
@@ -775,7 +775,7 @@ async function handleRequest(req, res) {
 
     if (tryServeStatic(req, res, url)) return;
 
-    sendJson(res, 404, { error: "Not found" }, req);
+    sendJson(res, 404, { error: "Not found", message: "Not found" }, req);
   } catch (error) {
     console.error(error);
     const status = error.message?.includes("already exists") ||

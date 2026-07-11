@@ -7,6 +7,7 @@ import CurrentWeather from '../components/CurrentWeather'
 import GuestAlertAreas from '../components/GuestAlertAreas'
 import SafetyTips from '../components/SafetyTips'
 import { useAuth } from '../context/AuthContext'
+import { apiErrorMessage } from '../utils/api'
 import { useLiveTornadoBrowserAlerts } from '../hooks/useLiveTornadoAlerts'
 import { classifyTornadoAlert, safetyTipKey } from '../utils/alerts'
 import {
@@ -61,7 +62,7 @@ export default function LivePage() {
         setPollIntervalMs(response.data.pollIntervalMs)
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not load alerts. Is the backend running?')
+      setError(apiErrorMessage(err, 'Could not load alerts. Is the backend running?'))
     } finally {
       setLoading(false)
     }

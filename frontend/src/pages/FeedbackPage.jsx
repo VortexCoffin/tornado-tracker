@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
 import Header from '../components/Header'
 import { useAuth } from '../context/AuthContext'
+import { apiErrorMessage } from '../utils/api'
 
 function formatTime(value) {
   if (!value) return ''
@@ -32,7 +33,7 @@ export default function FeedbackPage() {
       setItems(response.data.feedback || [])
       setStats(response.data.stats || { total: 0, positive: 0, negative: 0 })
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not load feedback')
+      setError(apiErrorMessage(err, 'Could not load feedback'))
     } finally {
       setLoading(false)
     }
@@ -68,7 +69,7 @@ export default function FeedbackPage() {
       setRating('positive')
       setMessage('Thanks — your feedback was posted.')
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not post feedback')
+      setError(apiErrorMessage(err, 'Could not post feedback'))
     } finally {
       setSubmitting(false)
     }

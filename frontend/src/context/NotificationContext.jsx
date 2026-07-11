@@ -1,15 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import { useAuth } from './AuthContext'
+import { authHeaders } from '../utils/api'
 
 const NotificationContext = createContext(null)
-const TOKEN_KEY = 'ctt_auth_token'
 const POLL_MS = 45 * 1000
-
-function authHeaders() {
-  const token = localStorage.getItem(TOKEN_KEY)
-  return token ? { Authorization: `Bearer ${token}` } : {}
-}
 
 export function NotificationProvider({ children }) {
   const { user } = useAuth()

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import axios from 'axios'
 import { parseLocationInput } from '../utils/locations'
+import { apiErrorMessage } from '../utils/api'
 
 const LOCATION_KEY = 'ctt_weather_location'
 
@@ -49,7 +50,7 @@ export default function CurrentWeather({
       )
     } catch (err) {
       setWeather(null)
-      setError(err.response?.data?.message || 'Could not load weather')
+      setError(apiErrorMessage(err, 'Could not load weather'))
     } finally {
       setLoading(false)
     }

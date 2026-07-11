@@ -5,6 +5,7 @@ import PastTornadoMap from '../components/PastTornadoMap'
 import OverlayPicker from '../components/OverlayPicker'
 import CurrentWeather from '../components/CurrentWeather'
 import { useAuth } from '../context/AuthContext'
+import { apiErrorMessage } from '../utils/api'
 
 export default function PastTornadoesPage() {
   const { user, overlays, preferences, updateMapPreferences } = useAuth()
@@ -33,7 +34,7 @@ export default function PastTornadoesPage() {
       setPeriodEnd(response.data.periodEnd || '')
       setNewsArticles(response.data.newsArticles || [])
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not load past tornado data.')
+      setError(apiErrorMessage(err, 'Could not load past tornado data.'))
     } finally {
       setLoading(false)
     }
@@ -151,7 +152,7 @@ export default function PastTornadoesPage() {
                 try {
                   await updateMapPreferences(updates)
                 } catch (err) {
-                  setError(err.response?.data?.message || 'Could not update map overlay')
+                  setError(apiErrorMessage(err, 'Could not update map overlay'))
                 }
               }}
             />

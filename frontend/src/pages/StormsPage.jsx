@@ -3,13 +3,7 @@ import { Link } from 'react-router-dom'
 import axios from 'axios'
 import Header from '../components/Header'
 import { useAuth } from '../context/AuthContext'
-
-const TOKEN_KEY = 'ctt_auth_token'
-
-function authHeaders() {
-  const token = localStorage.getItem(TOKEN_KEY)
-  return token ? { Authorization: `Bearer ${token}` } : {}
-}
+import { authHeaders, apiErrorMessage } from '../utils/api'
 
 function formatTime(value) {
   if (!value) return ''
@@ -52,7 +46,7 @@ export default function StormsPage() {
       const response = await axios.get('/api/storms/posts', { headers: authHeaders() })
       setPosts(response.data.posts || [])
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not load storm photos')
+      setError(apiErrorMessage(err, 'Could not load storm photos'))
     } finally {
       setLoading(false)
     }
@@ -97,7 +91,7 @@ export default function StormsPage() {
       setImagePreview('')
       await fetchPosts()
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not post photo')
+      setError(apiErrorMessage(err, 'Could not post photo'))
     } finally {
       setPosting(false)
     }
@@ -115,7 +109,7 @@ export default function StormsPage() {
         current.map((post) => (post.id === postId ? response.data.post : post))
       )
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not update like')
+      setError(apiErrorMessage(err, 'Could not update like'))
     }
   }
 
@@ -131,7 +125,7 @@ export default function StormsPage() {
       setPosts((current) => current.filter((post) => post.id !== postId))
       if (expandedId === postId) setExpandedId(null)
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not delete photo')
+      setError(apiErrorMessage(err, 'Could not delete photo'))
     } finally {
       setDeletingId(null)
     }
@@ -151,7 +145,7 @@ export default function StormsPage() {
       if (fullscreenPost?.id === postId) setFullscreenPost(null)
       setMessage('Thanks — post reported.')
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not report post')
+      setError(apiErrorMessage(err, 'Could not report post'))
     }
   }
 
@@ -171,7 +165,7 @@ export default function StormsPage() {
         current.map((post) => (post.id === postId ? response.data.post : post))
       )
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not post comment')
+      setError(apiErrorMessage(err, 'Could not post comment'))
     }
   }
 
