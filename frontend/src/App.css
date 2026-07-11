@@ -725,6 +725,57 @@
   font-size: 0.88rem;
 }
 
+.alert-banner-info {
+  background: rgba(33, 150, 243, 0.12);
+  border-bottom-color: rgba(33, 150, 243, 0.28);
+  color: #90caf9;
+}
+
+.alert-banner-info strong {
+  color: #bbdefb;
+  font-weight: 600;
+}
+
+.sms-coming-soon-chip {
+  margin: 0 0 0.65rem;
+  padding: 0.45rem 0.7rem;
+  border-radius: 999px;
+  width: fit-content;
+  max-width: 100%;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #90caf9;
+  background: rgba(33, 150, 243, 0.14);
+  border: 1px solid rgba(33, 150, 243, 0.3);
+}
+
+.alert-sms-note {
+  margin: 0.45rem 0 0;
+  font-size: 0.72rem;
+  color: #90caf9;
+  opacity: 0.9;
+}
+
+.coming-soon-badge {
+  display: inline-block;
+  margin-left: 0.35rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  vertical-align: middle;
+  color: #90caf9;
+  background: rgba(33, 150, 243, 0.16);
+  border: 1px solid rgba(33, 150, 243, 0.35);
+}
+
+.sms-coming-soon-note {
+  margin-bottom: 0.75rem;
+}
+
 .overlay-picker {
   display: grid;
   gap: 0.65rem;

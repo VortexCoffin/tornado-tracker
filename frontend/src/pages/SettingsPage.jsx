@@ -26,7 +26,6 @@ export default function SettingsPage() {
   const [alertAreas, setAlertAreas] = useState([])
   const [areaLocation, setAreaLocation] = useState('')
   const [areaProvince, setAreaProvince] = useState('SK')
-  const [smsConfigured, setSmsConfigured] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
@@ -126,8 +125,8 @@ export default function SettingsPage() {
       <main className="settings-page">
         <h2>Notification Settings</h2>
         <p className="settings-intro">
-          Get SMS and in-app alerts when Environment Canada issues a tornado warning or active
-          tornado alert.
+          Get in-app and browser alerts when Environment Canada issues a tornado warning or
+          active tornado alert. SMS text alerts are coming soon.
         </p>
 
         {loading ? (
@@ -162,21 +161,22 @@ export default function SettingsPage() {
             </section>
 
             <section className="settings-section">
-              <h3>SMS text alerts</h3>
-              {!smsConfigured && (
-                <p className="settings-note">
-                  SMS is not configured on the server yet. Add Twilio credentials to{' '}
-                  <code>backend/.env</code> to enable text messages.
-                </p>
-              )}
+              <h3>
+                SMS text alerts{' '}
+                <span className="coming-soon-badge">Coming soon</span>
+              </h3>
+              <p className="settings-note sms-coming-soon-note">
+                Text messages for tornado warnings are not available yet. You can still use
+                in-app and browser notifications now — SMS delivery is on the way.
+              </p>
               <label className="toggle-row">
                 <input
                   type="checkbox"
                   checked={smsEnabled}
                   onChange={(e) => setSmsEnabled(e.target.checked)}
-                  disabled={!smsConfigured}
+                  disabled
                 />
-                Send tornado warnings and alerts by text message
+                Send tornado warnings and alerts by text message (coming soon)
               </label>
               <label>
                 Mobile number (E.164 format)
@@ -185,7 +185,7 @@ export default function SettingsPage() {
                   placeholder="+15551234567"
                   value={phoneNumber}
                   onChange={(e) => setPhoneNumber(e.target.value)}
-                  disabled={!smsConfigured}
+                  disabled
                 />
               </label>
             </section>

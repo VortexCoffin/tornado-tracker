@@ -172,6 +172,13 @@ export default function LivePage() {
         </div>
       )}
 
+      <div className="alert-banner alert-banner-info" role="status">
+        <span>
+          <strong>SMS text alerts coming soon.</strong> Live map alerts and browser
+          notifications work now — text messages for tornado warnings are on the way.
+        </span>
+      </div>
+
       <div className="layout">
         <aside className="sidebar">
           <SafetyTips tipKey={safetyTipKey(selectedAlert)} />
@@ -223,6 +230,9 @@ export default function LivePage() {
           </div>
 
           <div className="alert-list">
+            <div className="sms-coming-soon-chip" role="note">
+              SMS alert notifications — coming soon
+            </div>
             {loading && alerts.length === 0 && (
               <div className="loading-state">Loading active alerts...</div>
             )}
@@ -251,6 +261,7 @@ export default function LivePage() {
                   <span>{formatTime(alert.publishedAt)}</span>
                 </div>
                 <p className="alert-summary">{alert.summary}</p>
+                <p className="alert-sms-note">SMS for this alert — coming soon</p>
               </button>
             ))}
           </div>
