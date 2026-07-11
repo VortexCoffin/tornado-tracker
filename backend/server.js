@@ -8,6 +8,8 @@ import {
   login,
   getUserFromRequest,
   getUserIdFromRequest,
+  getAccountFromRequest,
+  sealAccount,
 } from "./auth.js";
 import {
   getAccountById,
@@ -337,27 +339,38 @@ async function handleRequest(req, res) {
     }
 
     if (url.pathname === "/api/auth/me" && req.method === "GET") {
-      const user = getUserFromRequest(req);
-      if (!user) {
+      const account = getAccountFromRequest(req);
+      if (!account) {
         sendJson(res, 401, { error: "Not authenticated" }, req);
         return;
       }
-      sendJson(res, 200, { user }, req);
+      sendJson(
+        res,
+        200,
+        {
+          user: publicAccount(account),
+          accountBackup: sealAccount(account),
+        },
+        req
+      );
       return;
     }
 
     if (url.pathname === "/api/account" && req.method === "GET") {
-      const userId = getUserIdFromRequest(req);
-      if (!userId) {
+      const account = getAccountFromRequest(req);
+      if (!account) {
         sendJson(res, 401, { error: "Not authenticated" }, req);
         return;
       }
-      const account = getAccountById(userId);
-      if (!account) {
-        sendJson(res, 404, { error: "Account not found" }, req);
-        return;
-      }
-      sendJson(res, 200, { account: publicAccount(account) }, req);
+      sendJson(
+        res,
+        200,
+        {
+          account: publicAccount(account),
+          accountBackup: sealAccount(account),
+        },
+        req
+      );
       return;
     }
 
@@ -388,8 +401,16 @@ async function handleRequest(req, res) {
         return;
       }
       const body = await readJsonBody(req);
-      const account = setAccountOverlay(userId, body.overlayId);
-      sendJson(res, 200, { account: publicAccount(account) }, req);
+      const account = setAccountOverlay(userId, body);
+      sendJson(
+        res,
+        200,
+        {
+          account: publicAccount(account),
+          accountBackup: sealAccount(account),
+        },
+        req
+      );
       return;
     }
 
@@ -415,7 +436,15 @@ async function handleRequest(req, res) {
         return;
       }
       const account = await downgradeToFree(userId);
-      sendJson(res, 200, { account: publicAccount(account) }, req);
+      sendJson(
+        res,
+        200,
+        {
+          account: publicAccount(account),
+          accountBackup: sealAccount(account),
+        },
+        req
+      );
       return;
     }
 
@@ -444,7 +473,15 @@ async function handleRequest(req, res) {
       }
       const body = await readJsonBody(req);
       const account = await completePayPalSubscription(userId, body.subscriptionId);
-      sendJson(res, 200, { account: publicAccount(account) }, req);
+      sendJson(
+        res,
+        200,
+        {
+          account: publicAccount(account),
+          accountBackup: sealAccount(account),
+        },
+        req
+      );
       return;
     }
 

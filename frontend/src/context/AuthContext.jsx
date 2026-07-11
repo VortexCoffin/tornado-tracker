@@ -3,10 +3,26 @@ import axios from 'axios'
 
 const AuthContext = createContext(null)
 const TOKEN_KEY = 'ctt_auth_token'
+const BACKUP_KEY = 'ctt_account_backup'
 
 function authHeaders() {
   const token = localStorage.getItem(TOKEN_KEY)
-  return token ? { Authorization: `Bearer ${token}` } : {}
+  const backup = localStorage.getItem(BACKUP_KEY)
+  const headers = {}
+  if (token) headers.Authorization = `Bearer ${token}`
+  // Lets serverless instances restore the full account after cold starts
+  if (backup) headers['X-Account-Backup'] = backup
+  return headers
+}
+
+function persistSession({ token, accountBackup }) {
+  if (token) localStorage.setItem(TOKEN_KEY, token)
+  if (accountBackup) localStorage.setItem(BACKUP_KEY, accountBackup)
+}
+
+function clearSession() {
+  localStorage.removeItem(TOKEN_KEY)
+  localStorage.removeItem(BACKUP_KEY)
 }
 
 const GUEST_OVERLAYS = [
@@ -31,6 +47,9 @@ export function AuthProvider({ children }) {
     }
 
     const response = await axios.get('/api/auth/me', { headers: authHeaders() })
+    if (response.data.accountBackup) {
+      localStorage.setItem(BACKUP_KEY, response.data.accountBackup)
+    }
     setUser(response.data.user)
     return response.data.user
   }, [])
@@ -42,26 +61,34 @@ export function AuthProvider({ children }) {
       .catch(() => setPaypalConfig({ configured: false, clientId: '', mode: 'sandbox' }))
 
     refreshAccount()
-      .catch(() => localStorage.removeItem(TOKEN_KEY))
+      .catch(() => {
+        clearSession()
+        setUser(null)
+      })
       .finally(() => setLoading(false))
   }, [refreshAccount])
 
   const login = async (email, password) => {
-    const response = await axios.post('/api/auth/login', { email, password })
-    localStorage.setItem(TOKEN_KEY, response.data.token)
+    const accountBackup = localStorage.getItem(BACKUP_KEY) || undefined
+    const response = await axios.post('/api/auth/login', {
+      email,
+      password,
+      accountBackup,
+    })
+    persistSession(response.data)
     setUser(response.data.user)
     return response.data.user
   }
 
   const signup = async (name, email, password) => {
     const response = await axios.post('/api/auth/signup', { name, email, password })
-    localStorage.setItem(TOKEN_KEY, response.data.token)
+    persistSession(response.data)
     setUser(response.data.user)
     return response.data.user
   }
 
   const logout = () => {
-    localStorage.removeItem(TOKEN_KEY)
+    clearSession()
     setUser(null)
   }
 
@@ -69,6 +96,9 @@ export function AuthProvider({ children }) {
     const response = await axios.put('/api/account/overlay', updates, {
       headers: authHeaders(),
     })
+    if (response.data.accountBackup) {
+      localStorage.setItem(BACKUP_KEY, response.data.accountBackup)
+    }
     setUser(response.data.account)
     return response.data.account
   }
@@ -79,6 +109,9 @@ export function AuthProvider({ children }) {
       { tier: 'free' },
       { headers: authHeaders() }
     )
+    if (response.data.accountBackup) {
+      localStorage.setItem(BACKUP_KEY, response.data.accountBackup)
+    }
     setUser(response.data.account)
     return response.data.account
   }
@@ -101,6 +134,9 @@ export function AuthProvider({ children }) {
       { subscriptionId },
       { headers: authHeaders() }
     )
+    if (response.data.accountBackup) {
+      localStorage.setItem(BACKUP_KEY, response.data.accountBackup)
+    }
     setUser(response.data.account)
     return response.data.account
   }

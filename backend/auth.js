@@ -9,6 +9,7 @@ import {
   publicAccount,
   rehydrateAccountFromToken,
   updateAccount,
+  saveAccountFromBackup,
 } from "./accounts.js";
 
 const TOKEN_SECRET = process.env.AUTH_SECRET || "";
@@ -25,6 +26,7 @@ const EFFECTIVE_TOKEN_SECRET =
   "canada-tornado-tracker-dev-secret-change-me";
 
 const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const BACKUP_SALT = "canada-tornado-tracker-account-backup-v1";
 
 function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString("hex");
@@ -39,9 +41,67 @@ function verifyPassword(password, stored) {
   try {
     const attempt = crypto.scryptSync(password, salt, 64).toString("hex");
     if (hash.length !== attempt.length) return false;
-    return crypto.timingSafeEqual(Buffer.from(hash, "hex"), Buffer.from(attempt, "hex"));
+    return crypto.timingSafeEqual(
+      Buffer.from(hash, "hex"),
+      Buffer.from(attempt, "hex")
+    );
   } catch {
     return false;
+  }
+}
+
+function deriveBackupKey() {
+  return crypto.scryptSync(EFFECTIVE_TOKEN_SECRET, BACKUP_SALT, 32);
+}
+
+/** Encrypt full account (incl. password hash) for browser localStorage backup. */
+export function sealAccount(account) {
+  if (!account?.id || !account?.email) return null;
+
+  const payload = JSON.stringify({
+    id: account.id,
+    email: account.email,
+    name: account.name,
+    passwordHash: account.passwordHash || "",
+    createdAt: account.createdAt,
+    subscription: account.subscription,
+    preferences: account.preferences,
+    notifications: account.notifications,
+    sentAlertIds: account.sentAlertIds || [],
+  });
+
+  const key = deriveBackupKey();
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  const encrypted = Buffer.concat([
+    cipher.update(payload, "utf8"),
+    cipher.final(),
+  ]);
+  const tag = cipher.getAuthTag();
+  return Buffer.concat([iv, tag, encrypted]).toString("base64url");
+}
+
+/** Decrypt account backup from client. */
+export function openAccountBackup(blob) {
+  if (!blob || typeof blob !== "string") return null;
+  try {
+    const raw = Buffer.from(blob, "base64url");
+    if (raw.length < 29) return null;
+    const iv = raw.subarray(0, 12);
+    const tag = raw.subarray(12, 28);
+    const data = raw.subarray(28);
+    const key = deriveBackupKey();
+    const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
+    decipher.setAuthTag(tag);
+    const json = Buffer.concat([
+      decipher.update(data),
+      decipher.final(),
+    ]).toString("utf8");
+    const account = JSON.parse(json);
+    if (!account?.id || !account?.email || !account?.passwordHash) return null;
+    return account;
+  } catch {
+    return null;
   }
 }
 
@@ -91,25 +151,65 @@ function getTokenPayloadFromRequest(req) {
   return verifyToken(token);
 }
 
+function backupFromRequest(req) {
+  return (
+    req.headers["x-account-backup"] ||
+    req.headers["X-Account-Backup"] ||
+    null
+  );
+}
+
+/**
+ * Load account for this request: memory/disk → encrypted backup header → JWT shell.
+ */
+export function resolveAccountFromRequest(req) {
+  const payload = getTokenPayloadFromRequest(req);
+  if (!payload?.sub) return null;
+
+  let account = getAccountById(payload.sub);
+
+  // Prefer encrypted backup when local store is empty or missing password
+  if (!account?.passwordHash) {
+    const restored = openAccountBackup(backupFromRequest(req));
+    if (restored && restored.id === payload.sub) {
+      account = saveAccountFromBackup(restored);
+    } else if (
+      restored &&
+      restored.email === String(payload.email || "").toLowerCase()
+    ) {
+      account = saveAccountFromBackup(restored);
+    }
+  }
+
+  if (!account) {
+    account = rehydrateAccountFromToken(payload);
+  }
+
+  return account;
+}
+
+export function sessionForAccount(account) {
+  return {
+    user: publicAccount(account),
+    token: tokenForAccount(account),
+    accountBackup: sealAccount(account),
+  };
+}
+
 export { readUsers, writeUsers };
 
 export function getUserIdFromRequest(req) {
-  const payload = getTokenPayloadFromRequest(req);
-  if (!payload?.sub) return null;
-
-  // Ensure account exists on this instance (Vercel /tmp is not shared)
-  const account =
-    getAccountById(payload.sub) || rehydrateAccountFromToken(payload);
-  return account?.id || payload.sub;
+  const account = resolveAccountFromRequest(req);
+  return account?.id || null;
 }
 
 export function getUserFromRequest(req) {
-  const payload = getTokenPayloadFromRequest(req);
-  if (!payload?.sub) return null;
-
-  const account =
-    getAccountById(payload.sub) || rehydrateAccountFromToken(payload);
+  const account = resolveAccountFromRequest(req);
   return account ? publicAccount(account) : null;
+}
+
+export function getAccountFromRequest(req) {
+  return resolveAccountFromRequest(req);
 }
 
 export function signup({ email, password, name }) {
@@ -128,30 +228,29 @@ export function signup({ email, password, name }) {
   }
 
   const existing = getAccountByEmail(normalizedEmail);
-  if (existing && !existing.rehydrated) {
+  if (existing && !existing.rehydrated && existing.passwordHash) {
     throw new Error("An account with this email already exists");
   }
 
-  // If only a serverless rehydrated shell exists, upgrade it into a real account
-  if (existing?.rehydrated) {
-    const account = updateAccount(existing.id, {
+  let account;
+  if (existing?.rehydrated || (existing && !existing.passwordHash)) {
+    account = updateAccount(existing.id, {
       name: displayName,
       passwordHash: hashPassword(plainPassword),
       rehydrated: false,
     });
-    return { user: publicAccount(account), token: tokenForAccount(account) };
+  } else {
+    account = createAccount({
+      email: normalizedEmail,
+      name: displayName,
+      passwordHash: hashPassword(plainPassword),
+    });
   }
 
-  const account = createAccount({
-    email: normalizedEmail,
-    name: displayName,
-    passwordHash: hashPassword(plainPassword),
-  });
-
-  return { user: publicAccount(account), token: tokenForAccount(account) };
+  return sessionForAccount(account);
 }
 
-export function login({ email, password }) {
+export function login({ email, password, accountBackup }) {
   const normalizedEmail = String(email || "").trim().toLowerCase();
   const plainPassword = String(password || "");
 
@@ -160,22 +259,31 @@ export function login({ email, password }) {
   }
 
   let account = getAccountByEmail(normalizedEmail);
+
+  // Restore from browser backup when serverless storage was wiped
+  if (!account || !account.passwordHash) {
+    const restored = openAccountBackup(accountBackup);
+    if (restored && restored.email === normalizedEmail && restored.passwordHash) {
+      account = saveAccountFromBackup(restored);
+    }
+  }
+
   if (!account) {
     throw new Error("Invalid email or password");
   }
 
-  // After a cold start the password hash may be missing; bind password on login
   if (account.rehydrated || !account.passwordHash) {
-    if (plainPassword.length < 8) {
-      throw new Error("Password must be at least 8 characters");
-    }
-    account = updateAccount(account.id, {
-      passwordHash: hashPassword(plainPassword),
-      rehydrated: false,
-    });
-  } else if (!verifyPassword(plainPassword, account.passwordHash)) {
+    throw new Error(
+      "Could not verify account on this server. Sign up again on this device, or use the same browser where you created the account."
+    );
+  }
+
+  if (!verifyPassword(plainPassword, account.passwordHash)) {
     throw new Error("Invalid email or password");
   }
 
-  return { user: publicAccount(account), token: tokenForAccount(account) };
+  // Ensure this instance has the account for subsequent requests
+  account = saveAccountFromBackup(account);
+
+  return sessionForAccount(account);
 }

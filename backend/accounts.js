@@ -207,6 +207,37 @@ export function rehydrateAccountFromToken(payload) {
   });
 }
 
+/** Restore a full account record (from encrypted browser backup). */
+export function saveAccountFromBackup(raw) {
+  if (!raw?.id || !raw?.email) {
+    throw new Error("Invalid account backup");
+  }
+
+  return saveAccount({
+    id: raw.id,
+    email: String(raw.email).trim().toLowerCase(),
+    name: raw.name || "User",
+    passwordHash: raw.passwordHash || "",
+    createdAt: raw.createdAt || new Date().toISOString(),
+    rehydrated: false,
+    subscription: raw.subscription || defaultSubscription(),
+    preferences: raw.preferences || {
+      mapOverlay: "standard",
+      showRadar: true,
+      showClouds: false,
+    },
+    notifications: raw.notifications || {
+      smsEnabled: false,
+      inAppEnabled: true,
+      browserEnabled: true,
+      phoneNumber: "",
+      provinces: [],
+      alertAreas: [],
+    },
+    sentAlertIds: raw.sentAlertIds || [],
+  });
+}
+
 export function createAccount({ email, passwordHash, name }) {
   const account = saveAccount({
     id: crypto.randomUUID(),
