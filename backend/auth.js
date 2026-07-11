@@ -7,6 +7,8 @@ import {
   getAccountByEmail,
   createAccount,
   publicAccount,
+  rehydrateAccountFromToken,
+  updateAccount,
 } from "./accounts.js";
 
 const TOKEN_SECRET = process.env.AUTH_SECRET || "";
@@ -22,6 +24,8 @@ const EFFECTIVE_TOKEN_SECRET =
   process.env.VERCEL_GIT_COMMIT_SHA ||
   "canada-tornado-tracker-dev-secret-change-me";
 
+const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
 function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString("hex");
   const hash = crypto.scryptSync(password, salt, 64).toString("hex");
@@ -29,9 +33,16 @@ function hashPassword(password) {
 }
 
 function verifyPassword(password, stored) {
+  if (!stored || !stored.includes(":")) return false;
   const [salt, hash] = stored.split(":");
-  const attempt = crypto.scryptSync(password, salt, 64).toString("hex");
-  return crypto.timingSafeEqual(Buffer.from(hash, "hex"), Buffer.from(attempt, "hex"));
+  if (!salt || !hash) return false;
+  try {
+    const attempt = crypto.scryptSync(password, salt, 64).toString("hex");
+    if (hash.length !== attempt.length) return false;
+    return crypto.timingSafeEqual(Buffer.from(hash, "hex"), Buffer.from(attempt, "hex"));
+  } catch {
+    return false;
+  }
 }
 
 function signToken(payload) {
@@ -65,20 +76,39 @@ function verifyToken(token) {
   }
 }
 
+function tokenForAccount(account) {
+  return signToken({
+    sub: account.id,
+    email: account.email,
+    name: account.name,
+    exp: Date.now() + TOKEN_TTL_MS,
+  });
+}
+
+function getTokenPayloadFromRequest(req) {
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+  return verifyToken(token);
+}
+
 export { readUsers, writeUsers };
 
 export function getUserIdFromRequest(req) {
-  const header = req.headers.authorization || "";
-  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
-  const payload = verifyToken(token);
-  return payload?.sub || null;
+  const payload = getTokenPayloadFromRequest(req);
+  if (!payload?.sub) return null;
+
+  // Ensure account exists on this instance (Vercel /tmp is not shared)
+  const account =
+    getAccountById(payload.sub) || rehydrateAccountFromToken(payload);
+  return account?.id || payload.sub;
 }
 
 export function getUserFromRequest(req) {
-  const userId = getUserIdFromRequest(req);
-  if (!userId) return null;
+  const payload = getTokenPayloadFromRequest(req);
+  if (!payload?.sub) return null;
 
-  const account = getAccountById(userId);
+  const account =
+    getAccountById(payload.sub) || rehydrateAccountFromToken(payload);
   return account ? publicAccount(account) : null;
 }
 
@@ -97,8 +127,19 @@ export function signup({ email, password, name }) {
     throw new Error("Password must be at least 8 characters");
   }
 
-  if (getAccountByEmail(normalizedEmail)) {
+  const existing = getAccountByEmail(normalizedEmail);
+  if (existing && !existing.rehydrated) {
     throw new Error("An account with this email already exists");
+  }
+
+  // If only a serverless rehydrated shell exists, upgrade it into a real account
+  if (existing?.rehydrated) {
+    const account = updateAccount(existing.id, {
+      name: displayName,
+      passwordHash: hashPassword(plainPassword),
+      rehydrated: false,
+    });
+    return { user: publicAccount(account), token: tokenForAccount(account) };
   }
 
   const account = createAccount({
@@ -107,13 +148,7 @@ export function signup({ email, password, name }) {
     passwordHash: hashPassword(plainPassword),
   });
 
-  const token = signToken({
-    sub: account.id,
-    email: account.email,
-    exp: Date.now() + 7 * 24 * 60 * 60 * 1000,
-  });
-
-  return { user: publicAccount(account), token };
+  return { user: publicAccount(account), token: tokenForAccount(account) };
 }
 
 export function login({ email, password }) {
@@ -124,16 +159,23 @@ export function login({ email, password }) {
     throw new Error("Email and password are required");
   }
 
-  const account = getAccountByEmail(normalizedEmail);
-  if (!account || !verifyPassword(plainPassword, account.passwordHash)) {
+  let account = getAccountByEmail(normalizedEmail);
+  if (!account) {
     throw new Error("Invalid email or password");
   }
 
-  const token = signToken({
-    sub: account.id,
-    email: account.email,
-    exp: Date.now() + 7 * 24 * 60 * 60 * 1000,
-  });
+  // After a cold start the password hash may be missing; bind password on login
+  if (account.rehydrated || !account.passwordHash) {
+    if (plainPassword.length < 8) {
+      throw new Error("Password must be at least 8 characters");
+    }
+    account = updateAccount(account.id, {
+      passwordHash: hashPassword(plainPassword),
+      rehydrated: false,
+    });
+  } else if (!verifyPassword(plainPassword, account.passwordHash)) {
+    throw new Error("Invalid email or password");
+  }
 
-  return { user: publicAccount(account), token };
+  return { user: publicAccount(account), token: tokenForAccount(account) };
 }

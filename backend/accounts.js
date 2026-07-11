@@ -15,6 +15,14 @@ const ACCOUNTS_DIR = join(DATA_DIR, "accounts");
 const USERS_FILE = join(DATA_DIR, "users.json");
 const ACCOUNTS_INDEX = join(ACCOUNTS_DIR, "index.json");
 
+/** Survives across requests on the same warm serverless instance */
+function memoryStore() {
+  if (!globalThis.__ttAccountMem) {
+    globalThis.__ttAccountMem = new Map();
+  }
+  return globalThis.__ttAccountMem;
+}
+
 function ensureStorage() {
   if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
   if (!existsSync(ACCOUNTS_DIR)) mkdirSync(ACCOUNTS_DIR, { recursive: true });
@@ -54,6 +62,7 @@ function normalizeAccount(raw) {
     passwordHash: raw.passwordHash,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt || raw.createdAt,
+    rehydrated: Boolean(raw.rehydrated),
     subscription: {
       ...defaultSubscription(),
       ...(raw.subscription || {}),
@@ -82,21 +91,36 @@ function normalizeAccount(raw) {
 function saveAccount(account) {
   const normalized = normalizeAccount(account);
   normalized.updatedAt = new Date().toISOString();
-  writeFileSync(accountPath(normalized.id), JSON.stringify(normalized, null, 2));
+  try {
+    writeFileSync(accountPath(normalized.id), JSON.stringify(normalized, null, 2));
 
-  const index = readIndex();
-  if (!index.includes(normalized.id)) {
-    index.push(normalized.id);
-    writeIndex(index);
+    const index = readIndex();
+    if (!index.includes(normalized.id)) {
+      index.push(normalized.id);
+      writeIndex(index);
+    }
+  } catch (error) {
+    // /tmp or read-only FS can fail on some platforms; memory still works for the instance
+    console.warn("Account disk write failed:", error.message);
   }
 
+  memoryStore().set(normalized.id, normalized);
   return normalized;
 }
 
 function readAccountFile(id) {
+  const mem = memoryStore();
+  if (mem.has(id)) return mem.get(id);
+
   const file = accountPath(id);
   if (!existsSync(file)) return null;
-  return normalizeAccount(JSON.parse(readFileSync(file, "utf8")));
+  try {
+    const account = normalizeAccount(JSON.parse(readFileSync(file, "utf8")));
+    mem.set(id, account);
+    return account;
+  } catch {
+    return null;
+  }
 }
 
 function migrateLegacyUsers() {
@@ -125,13 +149,62 @@ export function writeUsers(users) {
 }
 
 export function getAccountById(id) {
+  if (!id) return null;
   migrateLegacyUsers();
   return readAccountFile(id);
 }
 
 export function getAccountByEmail(email) {
   const normalized = String(email || "").trim().toLowerCase();
+  if (!normalized) return null;
+
+  for (const account of memoryStore().values()) {
+    if (account.email === normalized) return account;
+  }
+
   return readUsers().find((account) => account.email === normalized) || null;
+}
+
+/**
+ * Recreate an account shell when the JWT is valid but disk storage was lost
+ * (common on Vercel serverless: /tmp is per-instance and ephemeral).
+ */
+export function rehydrateAccountFromToken(payload) {
+  if (!payload?.sub || !payload?.email) return null;
+
+  const existing = getAccountById(payload.sub);
+  if (existing) return existing;
+
+  const email = String(payload.email).trim().toLowerCase();
+  const byEmail = getAccountByEmail(email);
+  if (byEmail) {
+    // Same email under a different id on this instance — prefer stored row
+    return byEmail;
+  }
+
+  return saveAccount({
+    id: payload.sub,
+    email,
+    name: payload.name || email.split("@")[0] || "User",
+    passwordHash: "",
+    createdAt: new Date().toISOString(),
+    rehydrated: true,
+    subscription: defaultSubscription(),
+    preferences: {
+      mapOverlay: "standard",
+      showRadar: true,
+      showClouds: false,
+    },
+    notifications: {
+      smsEnabled: false,
+      inAppEnabled: true,
+      browserEnabled: true,
+      phoneNumber: "",
+      provinces: [],
+      alertAreas: [],
+    },
+    sentAlertIds: [],
+  });
 }
 
 export function createAccount({ email, passwordHash, name }) {
@@ -169,6 +242,10 @@ export function updateAccount(id, updates) {
       ? { ...account.subscription, ...updates.subscription }
       : account.subscription,
   };
+
+  if (updates.rehydrated === false) {
+    next.rehydrated = false;
+  }
 
   return saveAccount(next);
 }
