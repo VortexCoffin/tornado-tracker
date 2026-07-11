@@ -22,6 +22,7 @@ export default function Header({ children }) {
         </NavLink>
         <NavLink to="/past">Recent Tornadoes</NavLink>
         <NavLink to="/storms">Storm Feed</NavLink>
+        <NavLink to="/feedback">Feedback</NavLink>
       </nav>
 
       <div className="header-actions">

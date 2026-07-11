@@ -42,6 +42,7 @@ import {
   reportPost,
 } from "./storms.js";
 import { getCurrentWeather } from "./weather.js";
+import { listFeedback, createFeedback, feedbackStats } from "./feedback.js";
 import { isServerless } from "./paths.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -592,6 +593,35 @@ async function handleRequest(req, res) {
           periodEnd,
           newsArticles: newsArticles || [],
           events: filtered,
+        },
+        req
+      );
+      return;
+    }
+
+    if (url.pathname === "/api/feedback" && req.method === "GET") {
+      const rating = url.searchParams.get("rating") || undefined;
+      sendJson(
+        res,
+        200,
+        {
+          stats: feedbackStats(),
+          feedback: listFeedback({ rating }),
+        },
+        req
+      );
+      return;
+    }
+
+    if (url.pathname === "/api/feedback" && req.method === "POST") {
+      const body = await readJsonBody(req);
+      const item = createFeedback(body);
+      sendJson(
+        res,
+        201,
+        {
+          feedback: item,
+          stats: feedbackStats(),
         },
         req
       );

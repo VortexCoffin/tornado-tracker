@@ -8,6 +8,7 @@ import SignUpPage from './pages/SignUpPage'
 import SettingsPage from './pages/SettingsPage'
 import SubscribePage from './pages/SubscribePage'
 import StormsPage from './pages/StormsPage'
+import FeedbackPage from './pages/FeedbackPage'
 import './App.css'
 
 export default function App() {
@@ -19,6 +20,7 @@ export default function App() {
             <Route path="/" element={<LivePage />} />
             <Route path="/past" element={<PastTornadoesPage />} />
             <Route path="/storms" element={<StormsPage />} />
+            <Route path="/feedback" element={<FeedbackPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/subscribe" element={<SubscribePage />} />
             <Route path="/login" element={<LoginPage />} />
